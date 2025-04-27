@@ -1,0 +1,229 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Weather App</title>
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;600&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+
+<!-- Loader -->
+<div id="loader">
+    <div class="emoji">☁️</div>
+</div>
+
+<!-- Dynamic background with faded effect -->
+<div class="dynamic-bg" id="dynamic-bg"></div>
+<div class="bg-overlay"></div>
+
+<div class="container">
+    <div class="weather-display" id="weather-display">
+        <div class="weather-icon">
+            {% if weather %}
+            <img src="/static/icons/weather-icon.png" alt="Weather icon" class="weather-logo">
+            {% else %}
+            <img src="/static/icons/default-icon.png" alt="Weather icon" class="weather-logo">
+            {% endif %}
+        </div>
+        
+        <div class="weather-info">
+            {% if weather %}
+            <h1 class="temperature">{{ weather.temp }}</h1>
+            <div class="location-info">
+                <h2>{{ weather.location }}</h2>
+                <p class="date-time">{{ weather.location.split(',')[0] }} {% if weather.location.split(',')[1] %}{{ weather.location.split(',')[1] }}{% endif %} {{ today_date }}</p>
+            </div>
+            <div class="weather-details">
+                <p class="condition">{{ weather.condition }}</p>
+                <p class="humidity">Humidity: {{ weather.humidity.split(':')[1] }}</p>
+                <p class="wind">Wind: {{ weather.wind.split(':')[1] }}</p>
+            </div>
+            {% else %}
+            <h1 class="temperature">--°C</h1>
+            <div class="location-info">
+                <h2>Location</h2>
+                <p class="date-time">City, Country</p>
+            </div>
+            <div class="weather-details">
+                <p class="condition">Weather condition</p>
+                <p class="humidity">Humidity: --%</p>
+                <p class="wind">Wind: -- km/h</p>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+    
+    <div class="search-panel">
+        <div class="search-container">
+            <form method="POST">
+                <input type="text" name="city" placeholder="Search location..." required>
+                <button type="submit" class="search-btn">Search</button>
+            </form>
+            <button type="button" id="detect-location" class="location-btn">📍 Auto-Detect</button>
+        </div>
+        
+        <div class="recent-searches">
+            <h3>Recent search</h3>
+            <ul id="recent-search-list">
+                <li>Bangladesh</li>
+                <li>Italy</li>
+                <li>France</li>
+                <li>Turkey</li>
+                <li>India</li>
+                <li>Dubai</li>
+            </ul>
+        </div>
+        
+    </div>
+</div>
+
+<div id="toast"></div>
+
+<script>
+document.addEventListener("DOMContentLoaded", () => {
+    // Store searched cities
+    let recentSearches = localStorage.getItem('recentSearches') ? 
+                         JSON.parse(localStorage.getItem('recentSearches')) : 
+                         ['Bangladesh', 'Italy', 'France', 'Turkey', 'India', 'Dubai'];
+    
+    // Update recent searches list
+    function updateRecentSearches() {
+        const listElement = document.getElementById('recent-search-list');
+        listElement.innerHTML = '';
+        
+        recentSearches.forEach(city => {
+            const li = document.createElement('li');
+            li.textContent = city;
+            li.addEventListener('click', () => {
+                document.querySelector("input[name='city']").value = city;
+                document.querySelector("form").submit();
+            });
+            listElement.appendChild(li);
+        });
+    }
+    
+    // Add city to recent searches
+    function addToRecentSearches(city) {
+        // Remove if already exists
+        const index = recentSearches.indexOf(city);
+        if (index > -1) {
+            recentSearches.splice(index, 1);
+        }
+        
+        // Add to beginning
+        recentSearches.unshift(city);
+        
+        // Keep only 6 most recent
+        if (recentSearches.length > 6) {
+            recentSearches.pop();
+        }
+        
+        // Save and update UI
+        localStorage.setItem('recentSearches', JSON.stringify(recentSearches));
+        updateRecentSearches();
+    }
+    
+    // Initialize recent searches
+    updateRecentSearches();
+    
+    // Handle form submission to add to recent searches
+    const form = document.querySelector("form");
+    form.addEventListener('submit', (e) => {
+        const city = document.querySelector("input[name='city']").value;
+        if (city) {
+            addToRecentSearches(city);
+        }
+    });
+    
+    // Geolocation
+    const geoBtn = document.getElementById("detect-location");
+    geoBtn.addEventListener("click", () => {
+        if (navigator.geolocation) {
+            navigator.geolocation.getCurrentPosition(async (pos) => {
+                const lat = pos.coords.latitude;
+                const lon = pos.coords.longitude;
+                try {
+                    const res = await fetch(`https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${lat}&lon=${lon}`);
+                    const data = await res.json();
+                    const city = data.address.city || data.address.town || data.address.state || data.address.country;
+                    document.querySelector("input[name='city']").value = city;
+                    showToast(`📍 Detected: ${city}`);
+                    form.submit();
+                } catch (error) {
+                    showToast('❌ Location detection failed');
+                }
+            }, () => {
+                showToast('❌ Location permission denied');
+            });
+        } else {
+            showToast('❌ Geolocation not supported');
+        }
+    });
+
+    window.addEventListener("load", () => {
+        document.body.classList.add("loaded");
+    });
+    
+    {% if weather %}
+    showToast('🌦️ Weather updated!');
+    updateBackground('{{ weather.condition }}');
+    {% endif %}
+});
+
+function updateBackground(condition = null) {
+    const dynamicBg = document.getElementById('dynamic-bg');
+    const weatherDisplay = document.getElementById('weather-display');
+    
+    let backgroundImage = '/static/backgrounds/default.jpg'; // fallback
+    
+    if (condition) {
+        condition = condition.toLowerCase();
+        
+        // Set image based on weather condition
+        if (condition.includes("clear") || condition.includes("sun")) {
+            backgroundImage = '/static/backgrounds/clear.jpg';
+        } else if (condition.includes("cloud") || condition.includes("overcast")) {
+            backgroundImage = '/static/backgrounds/cloud.jpg';
+        } else if (condition.includes("rain") || condition.includes("drizzle")) {
+            backgroundImage = '/static/backgrounds/rain.jpg';
+        } else if (condition.includes("storm") || condition.includes("thunder")) {
+            backgroundImage = '/static/backgrounds/storm.jpg';
+        } else if (condition.includes("snow") || condition.includes("sleet")) {
+            backgroundImage = '/static/backgrounds/snow.jpg';
+        } else if (condition.includes("fog") || condition.includes("mist") || condition.includes("haze")) {
+            backgroundImage = '/static/backgrounds/fog.jpg';
+        } else if (condition.includes("wind")) {
+            backgroundImage = '/static/backgrounds/wind.jpg';
+        }
+    }
+    
+    // Update both backgrounds:
+    // 1. The faded background for the page
+    dynamicBg.style.backgroundImage = `url('${backgroundImage}')`;
+    
+    // 2. The unfaded background for the weather display section
+    weatherDisplay.style.setProperty('--weather-bg', `url('${backgroundImage}')`);
+    
+    // Use JavaScript to set the background image on the ::before pseudo-element
+    const style = document.createElement('style');
+    style.textContent = `
+        .weather-display::before {
+            background-image: url('${backgroundImage}') !important;
+        }
+    `;
+    document.head.appendChild(style);
+}
+
+function showToast(message) {
+    const toast = document.getElementById("toast");
+    toast.innerText = message;
+    toast.style.display = "block";
+    setTimeout(() => {
+        toast.style.display = "none";
+    }, 3000);
+}
+</script>
+
+</body>
+</html>
