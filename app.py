@@ -4,7 +4,6 @@ from datetime import datetime
 
 app = Flask(__name__)
 
-# Map condition text to emoji icons
 def get_icon(condition):
     condition = condition.lower()
     if "clear" in condition or "sun" in condition:
